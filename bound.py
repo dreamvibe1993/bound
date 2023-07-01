@@ -75,9 +75,8 @@ def create_mobx_observables_js_object(ts_class) -> str:
 	if len(actions) > 0:
 		actions_bound = ',\n'.join(f'    {a}' for a in create_action_bounds(actions))
 		actions_bound_str = f'\n{actions_bound},\n'
-	obj = f'export const {class_name[0].lower() + class_name[1:]}Observables = {{{observables_str}{computeds_str}{actions_bound_str}}};'
-	print(obj)
-	return obj
+	mobx_object = f'export const {class_name[0].lower() + class_name[1:]}Observables = {{{observables_str}{computeds_str}{actions_bound_str}}};'
+	return mobx_object
 
 
 def delete_all_what_is_commented(ts_file: str) -> str:
@@ -125,11 +124,11 @@ def get_all_actions_in_class(ts_class: str) -> "list[str]":
 	ts_class_copy = re.sub(r"(?<=\)):[^}]*?(?={)", "", ts_class_copy, re.DOTALL)
 	ts_class_copy = re.sub(r"\(.*?\)", "()", ts_class_copy, flags=re.DOTALL)
 	ts_class_copy = re.sub(r":[^%\n]+?{", "()", ts_class_copy, re.DOTALL)
-	dirty_methods: list[str] = re.findall(r"(?<!\w\s)(?<=\s\s)\w+\(\)[^;),]{?\n?", ts_class_copy,
+	unprocessed_methods: list[str] = re.findall(r"(?<!\w\s)(?<=\s\s)\w+\(\)[^;),]{?\n?", ts_class_copy,
 	                                      flags=re.DOTALL | re.MULTILINE)
 	methods: list[str] = []
-	for d_method in dirty_methods:
-		methods.append(re.sub(r"[(){\n\r\s]", "", d_method))
+	for unprocessed_method in unprocessed_methods:
+		methods.append(re.sub(r"[(){\n\r\s]", "", unprocessed_method))
 	return sorted(methods)
 
 
@@ -207,3 +206,7 @@ def main():
 
 
 main()
+
+# TODO:
+# Обнаружение есть ли mobx в импортах
+# Работа с любым названием сущ. объекта с переменными
