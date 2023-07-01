@@ -27,7 +27,7 @@ def paste_mobx_bounds_object(ts_file: str) -> str:
 	if not ts_file: return ""
 	ts_file_copy = ts_file
 	ts_class: str = get_ts_class(ts_file_copy)
-	updated_ts_file = ts_file_copy.replace(ts_class, create_mobx_observables_js_object(ts_class) + "\n" + ts_class)
+	updated_ts_file = ts_file_copy.replace(ts_class, create_mobx_observables_js_object(ts_class) + "\n\n" + ts_class)
 	return updated_ts_file
 
 
