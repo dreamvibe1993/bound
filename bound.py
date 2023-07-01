@@ -80,6 +80,11 @@ def create_mobx_observables_js_object(ts_class) -> str:
 	return obj
 
 
+def delete_all_what_is_commented(ts_file: str) -> str:
+	no_comments = re.sub(r"//.*", "", ts_file, re.DOTALL)
+	return no_comments if len(no_comments) > 0 else ts_file
+
+
 def get_all_observables_in_class(ts_class: str) -> "list[str]":
 	def cut_all_before_constructor(ts_class_string: str) -> str:
 		cut = re.search(r"(?<={)[^%]*(?=constructor)", ts_class_string)
@@ -95,7 +100,7 @@ def get_all_observables_in_class(ts_class: str) -> "list[str]":
 		all_observables_to_string = re.sub(r"(\n*|\s*)", "", ";".join(observables_processed).strip())
 		return all_observables_to_string
 
-	ts_class_copy = ts_class
+	ts_class_copy = delete_all_what_is_commented(ts_class)
 	ts_class_copy: str = cut_all_before_constructor(ts_class_copy)
 	ts_class_copy: str = re.sub(r"/.*?\*/", "", ts_class_copy, flags=re.DOTALL)
 	ts_class_copy: str = re.sub(r"\s=.+?;", ";", ts_class_copy, flags=re.DOTALL)
@@ -110,7 +115,7 @@ def get_all_observables_in_class(ts_class: str) -> "list[str]":
 
 def get_all_actions_in_class(ts_class: str) -> "list[str]":
 	observables = get_all_observables_in_class(ts_class)
-	ts_class_copy = ts_class
+	ts_class_copy = delete_all_what_is_commented(ts_class)
 	for observable in observables:
 		ts_class_copy = re.sub(fr"(?<=\s\s)(private|abstract|protected)?\s{observable}.*", "", ts_class_copy)
 	ts_class_copy = re.sub(r"^.*class\s.+{", "", ts_class_copy, re.DOTALL).strip()
@@ -120,7 +125,7 @@ def get_all_actions_in_class(ts_class: str) -> "list[str]":
 	ts_class_copy = re.sub(r"(?<=\)):[^}]*?(?={)", "", ts_class_copy, re.DOTALL)
 	ts_class_copy = re.sub(r"\(.*?\)", "()", ts_class_copy, flags=re.DOTALL)
 	ts_class_copy = re.sub(r":[^%\n]+?{", "()", ts_class_copy, re.DOTALL)
-	dirty_methods: list[str] = re.findall(r"(?<!\w\s)(?<=\s)\w+\(\)[^;),]{?\n?", ts_class_copy,
+	dirty_methods: list[str] = re.findall(r"(?<!\w\s)(?<=\s\s)\w+\(\)[^;),]{?\n?", ts_class_copy,
 	                                      flags=re.DOTALL | re.MULTILINE)
 	methods: list[str] = []
 	for d_method in dirty_methods:
@@ -129,7 +134,8 @@ def get_all_actions_in_class(ts_class: str) -> "list[str]":
 
 
 def get_all_computeds_in_class(ts_class: str) -> "list[str]":
-	computeds: list[str] = re.findall(r"(?<=get\s)\w+", ts_class) + re.findall(r"(?<=set\s)\w+", ts_class)
+	ts_class_copy = delete_all_what_is_commented(ts_class)
+	computeds: list[str] = re.findall(r"(?<=get\s)\w+", ts_class_copy) + re.findall(r"(?<=set\s)\w+", ts_class_copy)
 	return sorted(computeds)
 
 
@@ -184,7 +190,7 @@ def process_file(file_path) -> str:
 def handle_finish(content, file_path) -> None:
 	with open(file_path, 'w') as annotated_file:
 		annotated_file.write(content)
-	print(f"Файл сохранен как: {file_path}")
+	say(f"Файл сохранен как: {file_path}")
 
 
 def main():
@@ -198,3 +204,6 @@ def main():
 	else:
 		say(
 			f"Указанный путь '{path}' не является файлом TS.")
+
+
+main()
