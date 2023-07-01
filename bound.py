@@ -4,11 +4,65 @@ import re
 from re import Match
 from typing import Union
 
+mobx_reserved_words: "list[str]" = ['observable', 'action.bound', 'computed']
+
+
+# Process strings
+
+def get_class_name(ts_class: str) -> str:
+	class_name = re.search(r"(?<=class\s)\w+", ts_class)
+	return class_name.group(0) if class_name else ts_class
+
+
+def create_bounds(actions: "list[str]") -> "list[str]":
+	list_of_actions_bound: list[str] = []
+	for action in actions:
+		list_of_actions_bound.append(f"{action}: action.bound")
+	return sorted(list_of_actions_bound)
+
+
+def create_obsers(obsers: "list[str]") -> "list[str]":
+	list_of_observables: list[str] = []
+	for obser in obsers:
+		list_of_observables.append(f"{obser}: observable")
+	return sorted(list_of_observables)
+
+
+def create_computeds(computeds: "list[str]") -> "list[str]":
+	list_of_computeds: list[str] = []
+	for computed in computeds:
+		list_of_computeds.append(f"{computed}: computed")
+	return sorted(list_of_computeds)
+
+
+def create_mobx_observables_js_object(ts_class) -> str:
+	class_name = get_class_name(ts_class)
+	variables: list[str] = get_all_observables_in_class(ts_class)
+	actions: list[str] = get_all_actions_in_class(ts_class)
+	getters_setters: list[str] = get_all_computeds_in_class(ts_class)
+
+	observables: list[str] = create_obsers(variables)
+	actions_bound: list[str] = create_bounds(actions)
+	computeds: list[str] = create_computeds(getters_setters)
+
+	obj = f'''
+    export const {class_name.lower()}Observables = {{{",".join(observables)}
+
+    {",".join(computeds)}
+
+    {",".join(actions_bound)}
+    }}
+    '''
+
+	print(obj)
+
+	return obj
+
 
 def get_all_observables_in_class(ts_class: str) -> "list[str]":
 	def cut_all_before_constructor(ts_class_string: str) -> str:
 		cut = re.search(r"(?<={)[^%]*(?=constructor)", ts_class_string)
-		return cut.group(0) if cut else ""
+		return cut.group(0) if cut else ts_class_string
 
 	def get_rid_of_comments(piece: str) -> str:
 		return re.sub(r"/.*?\*/", "", piece, flags=re.DOTALL)
@@ -20,33 +74,72 @@ def get_all_observables_in_class(ts_class: str) -> "list[str]":
 		return re.sub(r":.+?(?=;)", "", piece, flags=re.DOTALL)
 
 	def cut_reserved_words(piece: str) -> str:
-		obsers: list[str] = piece.split(";")
+		observables: list[str] = piece.split(";")
 		observables_processed: list[str] = []
-		for obser in obsers:
-			observables_processed.append(re.sub(r"\w(?=\s)", "", obser))
-		return re.sub(r"(\n*|\s*)", "", ";".join(observables_processed).strip())
+		for observable in observables:
+			if "abstract" in observable: continue
+			observable_processed = re.sub(r"\w+(?=\s)", "", observable)
+			observables_processed.append(observable_processed.strip())
+		all_observables_to_string = re.sub(r"(\n*|\s*)", "", ";".join(observables_processed).strip())
+		return all_observables_to_string
 
-	piece_b4_constructor: str = cut_all_before_constructor(ts_class)
-	no_comments: str = get_rid_of_comments(piece_b4_constructor)
-	equalized: str = cut_everything_after_eq_sign(no_comments)
-	no_types: str = cut_everything_after_ddot(equalized)
-	no_res_words: str = cut_reserved_words(no_types)
+	ts_class_copy = ts_class
+	ts_class_copy: str = cut_all_before_constructor(ts_class_copy)
+	ts_class_copy: str = get_rid_of_comments(ts_class_copy)
+	ts_class_copy: str = cut_everything_after_eq_sign(ts_class_copy)
+	ts_class_copy: str = cut_everything_after_ddot(ts_class_copy)
+	ts_class_copy: str = cut_reserved_words(ts_class_copy)
 	observables: list[str] = []
-	for observable in no_res_words.split(";"):
-		if observable != "":
+	for observable in ts_class_copy.split(";"):
+		if observable != "" and observable not in observables:
 			observables.append(re.sub(r"\W*", "", observable))
-	return observables
+	return sorted(observables)
+
+
+def get_all_actions_in_class(ts_class: str) -> "list[str]":
+	observables = get_all_observables_in_class(ts_class)
+	ts_class_copy = ts_class
+	for observable in observables:
+		ts_class_copy = re.sub(fr"(?<=\s\s)(private|abstract|protected)?\s{observable}.*", "", ts_class_copy)
+	ts_class_copy = re.sub(r"^.*class\s.+{", "", ts_class_copy, re.DOTALL).strip()
+	ts_class_copy = re.sub(r"constructor[^}]*}", "", ts_class_copy, re.DOTALL)
+	ts_class_copy = re.sub(r"(get|set)\s[^}]*}", "", ts_class_copy, re.DOTALL)
+	ts_class_copy = re.sub(r"(?<=\)):[^}]*?(?={)", "", ts_class_copy, re.DOTALL)
+	ts_class_copy = re.sub(r"\(.*?\)", "()", ts_class_copy, flags=re.DOTALL)
+	ts_class_copy = re.sub(r":[^%\n]+?{", "()", ts_class_copy, re.DOTALL)
+	dirty_methods: list[str] = re.findall(r"(?<!\w\s)(?<=\s)\w+\(\)[^;)]{?\n?", ts_class_copy,
+	                                      flags=re.DOTALL | re.MULTILINE)
+	methods: list[str] = []
+	for d_method in dirty_methods:
+		methods.append(re.sub(r"[(){\n\r\s]", "", d_method))
+	print(methods)
+	return sorted(methods)
+
+
+def get_all_computeds_in_class(ts_class: str) -> "list[str]":
+	computeds: list[str] = re.findall(r"(?<=get\s)\w+", ts_class) + re.findall(r"(?<=set\s)\w+", ts_class)
+	return sorted(computeds)
 
 
 def get_class_model(ts_file: str) -> str:
-	class_model: Union[Match[bytes], None, Match[str]] = re.search(r"(export\s)?class\s[A-Z]\w+[^%]*}", ts_file)
-	return class_model.group(0) if class_model else ""
+	class_model = re.search(r"(export\s)?class\s[A-Z]\w+[^%]*}", ts_file)
+	return class_model.group(0) if class_model else ts_file
 
 
 def get_existing_mobx_observables_obj(model_str: str) -> str:
-	observables_js_obj: Union[Match[bytes], None, Match[str]] = re.search(r"(export\s)?const\s\w+\s=\s{[^/]*};",
-	                                                                      model_str)
-	return observables_js_obj.group(0) if observables_js_obj else ""
+	if 'Observables' not in model_str:
+		print('Кажется, в этом файле нет объекта, оканчивающегося на Observables. Вы правильно назвали объект?')
+	observables_js_obj: Union[Match[bytes], None, Match[str]] = re.search(
+		r"(export\s)?const\s\w+(Observables)\s=\s{[^/]*?};",
+		model_str)
+	if not observables_js_obj: return ""
+	string_found = observables_js_obj.group(0)
+	is_real_mobx_obj: bool = False
+	for r_word in mobx_reserved_words:
+		if is_real_mobx_obj: break
+		is_real_mobx_obj = r_word in string_found
+	if not is_real_mobx_obj: return ""
+	return string_found
 
 
 # Read and handle data
@@ -70,7 +163,7 @@ def process_file(file_path):
 
 
 parser = argparse.ArgumentParser(
-	description='Надо дописать')
+	description='Добавление сущностей')
 parser.add_argument('path', help='Путь к директории или файлу TSX/TS.')
 
 args = parser.parse_args()
