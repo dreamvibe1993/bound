@@ -21,10 +21,10 @@ def create_bounds(actions: "list[str]") -> "list[str]":
 	return sorted(list_of_actions_bound)
 
 
-def create_obsers(obsers: "list[str]") -> "list[str]":
+def create_observables(observables: "list[str]") -> "list[str]":
 	list_of_observables: list[str] = []
-	for obser in obsers:
-		list_of_observables.append(f"{obser}: observable")
+	for observable in observables:
+		list_of_observables.append(f"{observable}: observable")
 	return sorted(list_of_observables)
 
 
@@ -40,22 +40,19 @@ def create_mobx_observables_js_object(ts_class) -> str:
 	variables: list[str] = get_all_observables_in_class(ts_class)
 	actions: list[str] = get_all_actions_in_class(ts_class)
 	getters_setters: list[str] = get_all_computeds_in_class(ts_class)
-
-	observables: list[str] = create_obsers(variables)
-	actions_bound: list[str] = create_bounds(actions)
-	computeds: list[str] = create_computeds(getters_setters)
-
-	obj = f'''
-    export const {class_name.lower()}Observables = {{{",".join(observables)}
-
-    {",".join(computeds)}
-
-    {",".join(actions_bound)}
-    }}
-    '''
-
-	print(obj)
-
+	observables_str: str = ""
+	actions_bound_str: str = ""
+	computeds_str = ""
+	if len(variables) > 0:
+		observables = ',\n'.join(f'    {o}' for o in create_observables(variables))
+		observables_str = f"\n{observables},\n"
+	if len(getters_setters) > 0:
+		computeds = ',\n'.join(f'    {c}' for c in create_computeds(getters_setters))
+		computeds_str = f"\n{computeds},\n"
+	if len(actions) > 0:
+		actions_bound = ',\n'.join(f'    {a}' for a in create_bounds(actions))
+		actions_bound_str = f'\n{actions_bound},\n'
+	obj = f'export const {class_name[0].lower() + class_name[1:]}Observables = {{{observables_str}{computeds_str}{actions_bound_str}}};'
 	return obj
 
 
@@ -103,11 +100,12 @@ def get_all_actions_in_class(ts_class: str) -> "list[str]":
 		ts_class_copy = re.sub(fr"(?<=\s\s)(private|abstract|protected)?\s{observable}.*", "", ts_class_copy)
 	ts_class_copy = re.sub(r"^.*class\s.+{", "", ts_class_copy, re.DOTALL).strip()
 	ts_class_copy = re.sub(r"constructor[^}]*}", "", ts_class_copy, re.DOTALL)
+	ts_class_copy = re.sub(r"async\s", "", ts_class_copy, re.DOTALL)
 	ts_class_copy = re.sub(r"(get|set)\s[^}]*}", "", ts_class_copy, re.DOTALL)
 	ts_class_copy = re.sub(r"(?<=\)):[^}]*?(?={)", "", ts_class_copy, re.DOTALL)
 	ts_class_copy = re.sub(r"\(.*?\)", "()", ts_class_copy, flags=re.DOTALL)
 	ts_class_copy = re.sub(r":[^%\n]+?{", "()", ts_class_copy, re.DOTALL)
-	dirty_methods: list[str] = re.findall(r"(?<!\w\s)(?<=\s)\w+\(\)[^;)]{?\n?", ts_class_copy,
+	dirty_methods: list[str] = re.findall(r"(?<!\w\s)(?<=\s)\w+\(\)[^;),]{?\n?", ts_class_copy,
 	                                      flags=re.DOTALL | re.MULTILINE)
 	methods: list[str] = []
 	for d_method in dirty_methods:
@@ -163,8 +161,8 @@ def process_file(file_path):
 
 
 parser = argparse.ArgumentParser(
-	description='Добавление сущностей')
-parser.add_argument('path', help='Путь к директории или файлу TSX/TS.')
+	description='Синхронизация mobx observables моделей')
+parser.add_argument('path', help='Путь к директории или файлу TS.')
 
 args = parser.parse_args()
 path: str = args.path
